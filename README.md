@@ -12,4 +12,5 @@ A stream based msgpack unpacker
 ```
 go build
 go test
+go test -bench .
 ```
