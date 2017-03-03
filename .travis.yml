@@ -1,0 +1,15 @@
+dist: trusty
+sudo: required
+
+language: go
+go: 
+    - 1.7.3
+
+before_install:
+    - sudo pip install --user codecov
+
+script:
+    - go test -coverprofile=coverage.txt
+
+after_success:
+    - bash <(curl -s https://codecov.io/bash)
