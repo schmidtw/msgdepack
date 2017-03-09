@@ -401,44 +401,52 @@ func decodePayloadFloat64(m *MsgDepack) {
 func decodePayloadUint8(m *MsgDepack) {
 	m.payloadInt64 = int64(uint8(m.PayloadBytes[0]))
 	m.PayloadInt64 = &m.payloadInt64
+	m.PayloadBytes = nil
 }
 
 func decodePayloadInt8(m *MsgDepack) {
 	m.payloadInt64 = int64(int8(m.PayloadBytes[0]))
 	m.PayloadInt64 = &m.payloadInt64
+	m.PayloadBytes = nil
 }
 
 func decodePayloadUint16(m *MsgDepack) {
 	m.payloadInt64 = int64(binary.BigEndian.Uint16(m.PayloadBytes))
 	m.PayloadInt64 = &m.payloadInt64
+	m.PayloadBytes = nil
 }
 
 func decodePayloadInt16(m *MsgDepack) {
 	_ = m.PayloadBytes[1] // bounds check hint to compiler; see golang.org/issue/14808
 	m.payloadInt64 = int64(int16(m.PayloadBytes[0])<<8 | int16(m.PayloadBytes[1]))
 	m.PayloadInt64 = &m.payloadInt64
+	m.PayloadBytes = nil
 }
 
 func decodePayloadUint32(m *MsgDepack) {
 	m.payloadInt64 = int64(binary.BigEndian.Uint32(m.PayloadBytes))
 	m.PayloadInt64 = &m.payloadInt64
+	m.PayloadBytes = nil
 }
 
 func decodePayloadInt32(m *MsgDepack) {
 	_ = m.PayloadBytes[3] // bounds check hint to compiler; see golang.org/issue/14808
 	m.payloadInt64 = int64(int32(m.PayloadBytes[0])<<24 | int32(m.PayloadBytes[1])<<16 | int32(m.PayloadBytes[2])<<8 | int32(m.PayloadBytes[3]))
 	m.PayloadInt64 = &m.payloadInt64
+	m.PayloadBytes = nil
 }
 
 func decodePayloadUint64(m *MsgDepack) {
 	m.payloadUint64 = binary.BigEndian.Uint64(m.PayloadBytes)
 	m.PayloadUint64 = &m.payloadUint64
+	m.PayloadBytes = nil
 }
 
 func decodePayloadInt64(m *MsgDepack) {
 	_ = m.PayloadBytes[7] // bounds check hint to compiler; see golang.org/issue/14808
 	m.payloadInt64 = int64(m.PayloadBytes[0])<<56 | int64(m.PayloadBytes[1])<<48 | int64(m.PayloadBytes[2])<<40 | int64(m.PayloadBytes[3])<<32 | int64(m.PayloadBytes[4])<<24 | int64(m.PayloadBytes[5])<<16 | int64(m.PayloadBytes[6])<<8 | int64(m.PayloadBytes[7])
 	m.PayloadInt64 = &m.payloadInt64
+	m.PayloadBytes = nil
 }
 
 type msgDepackCtrl struct {

@@ -3,37 +3,123 @@ package msgdepack
 import (
 	"bytes"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
-func TestZeroSizeItems(t *testing.T) {
+func getStringPtr(s string) *string { return &s }
+
+func TestSingleElement(t *testing.T) {
 	type test struct {
-		element int
-		data    []byte
-	}
-	zeroTests := []test{
-		{element: Map, data: []byte{0x80}},
-		{element: Map, data: []byte{0xde, 0, 0}},
-		{element: Map, data: []byte{0xdf, 0, 0, 0, 0}},
-		{element: Array, data: []byte{0x90}},
-		{element: Array, data: []byte{0xdc, 0, 0}},
-		{element: Array, data: []byte{0xdd, 0, 0, 0, 0}},
+		element        int
+		in             []byte
+		payloadBool    *bool
+		payloadBytes   []byte
+		payloadFloat64 *float64
+		payloadInt64   *int64
+		payloadString  *string
+		payloadUint64  *uint64
 	}
 
-	for _, m := range zeroTests {
-		md := NewMsgDepack(bytes.NewReader(m.data))
+	False := false
+	True := true
+
+	zeroTests := []test{
+		// Small fixed values
+		{element: Int64, in: []byte{0x00}, payloadInt64: &[]int64{0}[0]},
+		{element: Int64, in: []byte{0x01}, payloadInt64: &[]int64{1}[0]},
+		{element: Int64, in: []byte{0x7f}, payloadInt64: &[]int64{127}[0]},
+		{element: Map, in: []byte{0x80}, payloadInt64: &[]int64{0}[0]},
+		{element: Array, in: []byte{0x90}, payloadInt64: &[]int64{0}[0]},
+		{element: String, in: []byte{0xa0}, payloadString: getStringPtr("")},
+		{element: String, in: []byte{0xa3, 'c', 'a', 't'}, payloadBytes: []byte{'c', 'a', 't'}, payloadString: getStringPtr("cat")},
+
+		// Nil
+		{element: Nil, in: []byte{0xc0}},
+
+		// Don't test 0xc1 as the result is an error repeatedly
+
+		// Bool
+		{element: Bool, in: []byte{0xc2}, payloadBool: &False},
+		{element: Bool, in: []byte{0xc3}, payloadBool: &True},
+
+		// Bytes
+		{element: Bytes, in: []byte{0xc4, 0}},
+		{element: Bytes, in: []byte{0xc4, 1, 33}, payloadBytes: []byte{33}},
+		{element: Bytes, in: []byte{0xc5, 0, 0}},
+		{element: Bytes, in: []byte{0xc5, 0, 1, 20}, payloadBytes: []byte{20}},
+		{element: Bytes, in: []byte{0xc6, 0, 0, 0, 0}},
+		{element: Bytes, in: []byte{0xc6, 0, 0, 0, 1, 40}, payloadBytes: []byte{40}},
+
+		// Extensions
+		{element: Extension, in: []byte{0xc7, 0, 10}, payloadBytes: []byte{10}},
+		{element: Extension, in: []byte{0xc7, 1, 10, 12}, payloadBytes: []byte{10, 12}},
+		{element: Extension, in: []byte{0xc8, 0, 0, 11}, payloadBytes: []byte{11}},
+		{element: Extension, in: []byte{0xc8, 0, 1, 14, 13}, payloadBytes: []byte{14, 13}},
+		{element: Extension, in: []byte{0xc9, 0, 0, 0, 0, 21}, payloadBytes: []byte{21}},
+		{element: Extension, in: []byte{0xc9, 0, 0, 0, 1, 21, 22}, payloadBytes: []byte{21, 22}},
+
+		// Floats ...
+
+		// Integers (signed & unsigned)
+		{element: Int64, in: []byte{0xcc, 0x7f}, payloadInt64: &[]int64{127}[0]},
+		{element: Int64, in: []byte{0xcc, 0xff}, payloadInt64: &[]int64{255}[0]},
+		{element: Int64, in: []byte{0xcd, 0x01, 0xff}, payloadInt64: &[]int64{511}[0]},
+		{element: Int64, in: []byte{0xcd, 0xff, 0xff}, payloadInt64: &[]int64{65535}[0]},
+		{element: Int64, in: []byte{0xce, 0, 0, 0x01, 0xff}, payloadInt64: &[]int64{0x1ff}[0]},
+		{element: Int64, in: []byte{0xce, 0xff, 0xff, 0xff, 0xff}, payloadInt64: &[]int64{0xffffffff}[0]},
+		{element: Uint64, in: []byte{0xcf, 0, 0, 0, 0, 0, 0, 0x01, 0xff}, payloadUint64: &[]uint64{0x1ff}[0]},
+		{element: Uint64, in: []byte{0xcf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, payloadUint64: &[]uint64{0xffffffffffffffff}[0]},
+		{element: Int64, in: []byte{0xd0, 0x7f}, payloadInt64: &[]int64{127}[0]},
+		{element: Int64, in: []byte{0xd0, 0xff}, payloadInt64: &[]int64{-1}[0]},
+		{element: Int64, in: []byte{0xd1, 0x01, 0xff}, payloadInt64: &[]int64{511}[0]},
+		{element: Int64, in: []byte{0xd1, 0xff, 0xff}, payloadInt64: &[]int64{-1}[0]},
+		{element: Int64, in: []byte{0xd2, 0, 0, 0x01, 0xff}, payloadInt64: &[]int64{0x1ff}[0]},
+		{element: Int64, in: []byte{0xd2, 0xff, 0xff, 0xff, 0xff}, payloadInt64: &[]int64{-1}[0]},
+		{element: Int64, in: []byte{0xd3, 0, 0, 0, 0, 0, 0, 0x01, 0xff}, payloadInt64: &[]int64{0x1ff}[0]},
+		{element: Int64, in: []byte{0xd3, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, payloadInt64: &[]int64{-1}[0]},
+
+		// Fixed extensions
+		{element: Extension, in: []byte{0xd4, 12, 13}, payloadBytes: []byte{12, 13}},
+		{element: Extension, in: []byte{0xd5, 12, 13, 14}, payloadBytes: []byte{12, 13, 14}},
+		{element: Extension, in: []byte{0xd6, 12, 13, 14, 15, 16}, payloadBytes: []byte{12, 13, 14, 15, 16}},
+		{element: Extension, in: []byte{0xd7, 12, 13, 14, 15, 16, 20, 21, 22, 23}, payloadBytes: []byte{12, 13, 14, 15, 16, 20, 21, 22, 23}},
+		{element: Extension, in: []byte{0xd8, 12, 13, 14, 15, 16, 20, 21, 22, 23, 30, 31, 32, 33, 34, 35, 36, 37}, payloadBytes: []byte{12, 13, 14, 15, 16, 20, 21, 22, 23, 30, 31, 32, 33, 34, 35, 36, 37}},
+
+		// Strings
+		{element: String, in: []byte{0xd9, 0}, payloadString: getStringPtr("")},
+		{element: String, in: []byte{0xd9, 3, 'c', 'a', 't'}, payloadBytes: []byte{'c', 'a', 't'}, payloadString: getStringPtr("cat")},
+		{element: String, in: []byte{0xda, 0, 0}, payloadString: getStringPtr("")},
+		{element: String, in: []byte{0xda, 0, 3, 'c', 'a', 't'}, payloadBytes: []byte{'c', 'a', 't'}, payloadString: getStringPtr("cat")},
+		{element: String, in: []byte{0xdb, 0, 0, 0, 0}, payloadString: getStringPtr("")},
+		{element: String, in: []byte{0xdb, 0, 0, 0, 3, 'c', 'a', 't'}, payloadBytes: []byte{'c', 'a', 't'}, payloadString: getStringPtr("cat")},
+
+		// Arrays of length 0
+		{element: Array, in: []byte{0xdc, 0, 0}, payloadInt64: &[]int64{0}[0]},
+		{element: Array, in: []byte{0xdd, 0, 0, 0, 0}, payloadInt64: &[]int64{0}[0]},
+
+		// Maps of length 0
+		{element: Map, in: []byte{0xde, 0, 0}, payloadInt64: &[]int64{0}[0]},
+		{element: Map, in: []byte{0xdf, 0, 0, 0, 0}, payloadInt64: &[]int64{0}[0]},
+	}
+
+	assert := assert.New(t)
+
+	for _, e := range zeroTests {
+		md := NewMsgDepack(bytes.NewReader(e.in))
 		element := md.Next()
-		if m.element != element {
-			t.Fail()
-		}
+		assert.Equal(e.element, element, "Element types must match")
 		md.Data()
-		if 0 != *md.PayloadInt64 {
-			t.Fail()
-		}
+		assert.Equal(e.payloadBool, md.PayloadBool, "PayloadBool should match")
+		assert.Equal(e.payloadBytes, md.PayloadBytes, "PayloadBytes should match")
+		assert.Equal(e.payloadFloat64, md.PayloadFloat64, "PayloadFloat64 should match")
+		assert.Equal(e.payloadInt64, md.PayloadInt64, "PayloadInt64 should match")
+		assert.Equal(e.payloadString, md.PayloadString, "PayloadString should match")
+		assert.Equal(e.payloadUint64, md.PayloadUint64, "PayloadUint64 should match")
 		element = md.Next()
-		if EOF != element {
-			t.Fail()
-		}
+		assert.Equal(EOF, element, "Next element should be EOF")
+		element = md.Next()
+		assert.Equal(EOF, element, "Next element should be EOF")
 	}
 }
 
