@@ -6,6 +6,37 @@ import (
 	"testing"
 )
 
+func TestZeroSizeItems(t *testing.T) {
+	type test struct {
+		element int
+		data    []byte
+	}
+	zeroTests := []test{
+		{element: Map, data: []byte{0x80}},
+		{element: Map, data: []byte{0xde, 0, 0}},
+		{element: Map, data: []byte{0xdf, 0, 0, 0, 0}},
+		{element: Array, data: []byte{0x90}},
+		{element: Array, data: []byte{0xdc, 0, 0}},
+		{element: Array, data: []byte{0xdd, 0, 0, 0, 0}},
+	}
+
+	for _, m := range zeroTests {
+		md := NewMsgDepack(bytes.NewReader(m.data))
+		element := md.Next()
+		if m.element != element {
+			t.Fail()
+		}
+		md.Data()
+		if 0 != *md.PayloadInt64 {
+			t.Fail()
+		}
+		element = md.Next()
+		if EOF != element {
+			t.Fail()
+		}
+	}
+}
+
 func TestDecode(t *testing.T) {
 	in := []byte{0x85, 0xa8, 0x6d, 0x73, 0x67, 0x5f, 0x74, 0x79,
 		0x70, 0x65, 0x03, 0xb0, 0x74, 0x72, 0x61, 0x6e,
