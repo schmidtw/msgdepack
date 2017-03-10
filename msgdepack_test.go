@@ -23,8 +23,9 @@ func TestSingleElement(t *testing.T) {
 
 	False := false
 	True := true
+	//Float64 := float64(3.2)
 
-	zeroTests := []test{
+	simpleTests := []test{
 		// Small fixed values
 		{element: Int64, in: []byte{0x00}, payloadInt64: &[]int64{0}[0]},
 		{element: Int64, in: []byte{0x01}, payloadInt64: &[]int64{1}[0]},
@@ -33,11 +34,14 @@ func TestSingleElement(t *testing.T) {
 		{element: Array, in: []byte{0x90}, payloadInt64: &[]int64{0}[0]},
 		{element: String, in: []byte{0xa0}, payloadString: getStringPtr("")},
 		{element: String, in: []byte{0xa3, 'c', 'a', 't'}, payloadBytes: []byte{'c', 'a', 't'}, payloadString: getStringPtr("cat")},
+		{element: Int64, in: []byte{0xe0}, payloadInt64: &[]int64{-32}[0]},
+		{element: Int64, in: []byte{0xe1}, payloadInt64: &[]int64{-31}[0]},
 
 		// Nil
 		{element: Nil, in: []byte{0xc0}},
 
-		// Don't test 0xc1 as the result is an error repeatedly
+		// Error
+		{element: Error, in: []byte{0xc1}},
 
 		// Bool
 		{element: Bool, in: []byte{0xc2}, payloadBool: &False},
@@ -59,7 +63,9 @@ func TestSingleElement(t *testing.T) {
 		{element: Extension, in: []byte{0xc9, 0, 0, 0, 0, 21}, payloadBytes: []byte{21}},
 		{element: Extension, in: []byte{0xc9, 0, 0, 0, 1, 21, 22}, payloadBytes: []byte{21, 22}},
 
-		// Floats ...
+		// Floats
+		{element: Float64, in: []byte{0xca, 0x40, 0x09, 0x99, 0x99}, payloadFloat64: &[]float64{2.15}[0]},
+		{element: Float64, in: []byte{0xcb, 0x40, 0x09, 0x99, 0x99, 0x99, 0x99, 0x99, 0x9a}, payloadFloat64: &[]float64{3.2}[0]},
 
 		// Integers (signed & unsigned)
 		{element: Int64, in: []byte{0xcc, 0x7f}, payloadInt64: &[]int64{127}[0]},
@@ -105,21 +111,115 @@ func TestSingleElement(t *testing.T) {
 
 	assert := assert.New(t)
 
-	for _, e := range zeroTests {
+	for _, e := range simpleTests {
 		md := NewMsgDepack(bytes.NewReader(e.in))
+
 		element := md.Next()
 		assert.Equal(e.element, element, "Element types must match")
-		md.Data()
+
+		assert.Equal((Error != element), md.Data(), "Data must be there.")
+		// Repeated calls should be consistant
+		assert.Equal((Error != element), md.Data(), "Data must be there.")
+		assert.Equal((Error != element), md.Data(), "Data must be there.")
+
+		// Check all types of payloads
 		assert.Equal(e.payloadBool, md.PayloadBool, "PayloadBool should match")
 		assert.Equal(e.payloadBytes, md.PayloadBytes, "PayloadBytes should match")
-		assert.Equal(e.payloadFloat64, md.PayloadFloat64, "PayloadFloat64 should match")
 		assert.Equal(e.payloadInt64, md.PayloadInt64, "PayloadInt64 should match")
 		assert.Equal(e.payloadString, md.PayloadString, "PayloadString should match")
 		assert.Equal(e.payloadUint64, md.PayloadUint64, "PayloadUint64 should match")
+		if nil != e.payloadFloat64 {
+			assert.InEpsilon(*e.payloadFloat64, *md.PayloadFloat64, float64(0.00001), "PayloadFloat64 should match")
+		} else {
+			assert.Nil(md.PayloadFloat64, "PayloadFloat64 should be nil")
+		}
+
+		if Error == element {
+			// validate the Error logic works correctly
+			element = md.Next()
+			assert.Equal(Error, element, "Next element should be Error")
+			assert.Equal(false, md.Data(), "Data must not there.")
+			element = md.Next()
+			assert.Equal(Error, element, "Next element should be Error")
+			assert.Equal(false, md.Data(), "Data must not there.")
+		} else {
+			// validate the EOF logic works correctly
+			element = md.Next()
+			assert.Equal(EOF, element, "Next element should be EOF")
+			assert.Equal(false, md.Data(), "Data must not there.")
+			element = md.Next()
+			assert.Equal(EOF, element, "Next element should be EOF")
+			assert.Equal(false, md.Data(), "Data must not there.")
+		}
+	}
+}
+
+func TestEarlyFailures(t *testing.T) {
+	type test struct {
+		elementNow  int
+		elementNext int
+		dataPresent bool
+		in          []byte
+	}
+
+	/* Run a set of tests to check if missing data is tolerated. */
+	errors := []test{
+		{elementNow: Error, elementNext: Error, in: []byte{0xc4}},
+		{elementNow: Error, elementNext: Error, in: []byte{0xc5}},
+		{elementNow: Error, elementNext: Error, in: []byte{0xc6}},
+		{elementNow: Error, elementNext: Error, in: []byte{0xc7}},
+		{elementNow: Error, elementNext: Error, in: []byte{0xc8}},
+		{elementNow: Error, elementNext: Error, in: []byte{0xc9}},
+		{elementNow: Float64, elementNext: EOF, in: []byte{0xca}},
+		{elementNow: Float64, elementNext: EOF, in: []byte{0xcb}},
+		{elementNow: Int64, elementNext: EOF, in: []byte{0xcc}},
+		{elementNow: Int64, elementNext: EOF, in: []byte{0xcd}},
+		{elementNow: Int64, elementNext: EOF, in: []byte{0xce}},
+		{elementNow: Uint64, elementNext: EOF, in: []byte{0xcf}},
+		{elementNow: Int64, elementNext: EOF, in: []byte{0xd0}},
+		{elementNow: Int64, elementNext: EOF, in: []byte{0xd1}},
+		{elementNow: Int64, elementNext: EOF, in: []byte{0xd2}},
+		{elementNow: Int64, elementNext: EOF, in: []byte{0xd3}},
+		{elementNow: Extension, elementNext: EOF, in: []byte{0xd4}},
+		{elementNow: Extension, elementNext: EOF, in: []byte{0xd5}},
+		{elementNow: Extension, elementNext: EOF, in: []byte{0xd6}},
+		{elementNow: Extension, elementNext: EOF, in: []byte{0xd7}},
+		{elementNow: Extension, elementNext: EOF, in: []byte{0xd8}},
+		{elementNow: Error, elementNext: Error, in: []byte{0xd9}},
+		{elementNow: Error, elementNext: Error, in: []byte{0xda}},
+		{elementNow: Error, elementNext: Error, in: []byte{0xdb}},
+		{elementNow: Error, elementNext: Error, in: []byte{0xdc}},
+		{elementNow: Error, elementNext: Error, in: []byte{0xdd}},
+		{elementNow: Error, elementNext: Error, in: []byte{0xde}},
+		{elementNow: Error, elementNext: Error, in: []byte{0xdf}},
+		{elementNow: Map, dataPresent: true, elementNext: Error, in: []byte{0x81}},
+		{elementNow: Array, dataPresent: true, elementNext: Error, in: []byte{0x91}},
+		{elementNow: String, elementNext: EOF, in: []byte{0xa3}},
+	}
+
+	assert := assert.New(t)
+
+	for _, e := range errors {
+		md := NewMsgDepack(bytes.NewReader(e.in))
+
+		element := md.Next()
+		assert.Equal(e.elementNow, element, "Element types must match")
+
+		assert.Equal(e.elementNext, md.Next(), "Next() element must be Error")
+		assert.Equal(false, md.Data(), "Data() must be false")
+		assert.Equal(e.elementNext, md.Next(), "Next() element must be Error, %v", e.in)
+		assert.Equal(false, md.Data(), "Data() must be false")
+
+		/* -- change the order of Next() and Data() -------------------- */
+
+		md = NewMsgDepack(bytes.NewReader(e.in))
+
 		element = md.Next()
-		assert.Equal(EOF, element, "Next element should be EOF")
-		element = md.Next()
-		assert.Equal(EOF, element, "Next element should be EOF")
+		assert.Equal(e.elementNow, element, "Element types must match")
+
+		assert.Equal(e.dataPresent, md.Data(), "Data() must be false")
+		assert.Equal(Error, md.Next(), "Next() element must be Error")
+		assert.Equal(false, md.Data(), "Data() must be false")
 	}
 }
 

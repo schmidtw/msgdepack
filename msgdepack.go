@@ -57,6 +57,7 @@ type MsgDepack struct {
 	elementsLeft   int64
 	elementType    int
 	buf            [8]byte
+	payloadDecoded bool
 	payloadLen     int64
 	payloadBool    bool
 	payloadFloat64 float64
@@ -113,6 +114,7 @@ func (m *MsgDepack) Next() int {
 				m.PayloadInt64 = nil
 				m.PayloadString = nil
 				m.PayloadUint64 = nil
+				m.payloadDecoded = false
 
 				if _, err := io.ReadFull(m.rs, m.token[:]); nil != err {
 					goto fail
@@ -154,7 +156,10 @@ func (m *MsgDepack) Data() bool {
 		}
 		m.payloadLen = 0
 	}
-	msgDepackMap[m.token[0]].decodePayload(m)
+	if false == m.payloadDecoded {
+		m.payloadDecoded = true
+		msgDepackMap[m.token[0]].decodePayload(m)
+	}
 	return true
 }
 
@@ -208,7 +213,7 @@ func decodeHeaderTrue(m *MsgDepack) {
 
 func decodeHeaderNegativeFixInt(m *MsgDepack) {
 	m.elementType = Int64
-	m.payloadInt64 = int64(0 - (0x7f & m.token[0]))
+	m.payloadInt64 = int64(int64(0x1f&m.token[0]) - 32)
 	m.PayloadInt64 = &m.payloadInt64
 }
 
@@ -390,12 +395,14 @@ func decodePayloadFloat32(m *MsgDepack) {
 	bits := binary.BigEndian.Uint32(m.PayloadBytes)
 	m.payloadFloat64 = float64(math.Float32frombits(bits))
 	m.PayloadFloat64 = &m.payloadFloat64
+	m.PayloadBytes = nil
 }
 
 func decodePayloadFloat64(m *MsgDepack) {
 	bits := binary.BigEndian.Uint64(m.PayloadBytes)
 	m.payloadFloat64 = math.Float64frombits(bits)
 	m.PayloadFloat64 = &m.payloadFloat64
+	m.PayloadBytes = nil
 }
 
 func decodePayloadUint8(m *MsgDepack) {
